@@ -59,35 +59,23 @@ def main():
     tbody = table.find("tbody")
     rows = tbody.find_all("tr") if tbody else table.find_all("tr")[1:]
 
-    print("Rank, Season, Winner, Score, Loser")
-    rank = 1
-    for tr in rows:
-        tds = tr.find_all(["td","th"])
-        # skip header-ish or short rows
-        if len(tds) < 5:
-            continue
+print("Rank, Season, Winner, Score, Loser")
+rank = 1
+for tr in rows:
+    tds = tr.find_all(["td","th"])
+    if len(tds) < 5:
+        continue
 
-        def cell(idx):
-            if idx is None or idx >= len(tds):
-                return ""
-            # some cells have links/footnotes; get clean text
-            return tds[idx].get_text(" ", strip=True)
+    season = tds[1].get_text(" ", strip=True)
+    winner = tds[2].get_text(" ", strip=True)
+    score  = tds[3].get_text(" ", strip=True)
+    loser  = tds[4].get_text(" ", strip=True)
 
-        season = cell(idx_season)
-        winner = cell(idx_winner)
-        score  = cell(idx_score)
-        loser  = cell(idx_loser)
+    # Skip the header-ish row that starts with "Date" in the Season cell
+    if season.lower().startswith("date"):
+        continue
 
-        # basic sanity: must have season and winner
-        if not (season and winner and score and loser):
-            continue
-
-        print(f"{rank}, {season}, {winner}, {score}, {loser}")
-        rank += 1
-        if rank > 20:
-            break
-
-if __name__ == "__main__":
-    main()
-
-	
+    print(f"{rank}, {season}, {winner}, {score}, {loser}")
+    rank += 1
+    if rank > 20:
+        break
