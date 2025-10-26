@@ -1,3 +1,4 @@
+"""
 football_stats.py
 Print TOP 20 NFL Touchdowns leaders (Regular season) from CBS Sports.
 Avoids kicker tables by scoring candidate tables and choosing the best match.
