@@ -1,68 +1,44 @@
 """
 apple_stock.py
-Scrape AAPL Historical Data. Try HTML first; if blocked, use CSV fallback.
-Sources:
-- HTML: https://finance.yahoo.com/quote/AAPL/history?p=AAPL
-- CSV : https://query1.finance.yahoo.com/v7/finance/download/AAPL
+Scrape AAPL historical prices from Yahoo using the public chart API.
+Primary (Yahoo JSON):
+  https://query2.finance.yahoo.com/v8/finance/chart/AAPL?range=2y&interval=1d&includePrePost=false&events=div%2Csplit
+This prints: Date, Close
 """
 
-import sys, json, time, csv
-from datetime import datetime
 import requests
-from bs4 import BeautifulSoup
+from datetime import datetime, timezone
 
-HTML_URL = "https://finance.yahoo.com/quote/AAPL/history?p=AAPL"
-CSV_URL  = "https://query1.finance.yahoo.com/v7/finance/download/AAPL"
-HEADERS = {"User-Agent": "Mozilla/5.0", "Accept-Language": "en-US,en;q=0.9"}
+CHART_URL = (
+    "https://query2.finance.yahoo.com/v8/finance/chart/AAPL"
+    "?range=2y&interval=1d&includePrePost=false&events=div%2Csplit"
+)
+
+HEADERS = {"User-Agent": "Mozilla/5.0"}
 
 def epoch_to_ymd(sec: int) -> str:
-    return datetime.utcfromtimestamp(sec).strftime("%Y-%m-%d")
-
-def try_html():
-    r = requests.get(HTML_URL, headers=HEADERS, timeout=25)
-    r.raise_for_status()
-    soup = BeautifulSoup(r.text, "html.parser")
-    blob = None
-    for sc in soup.find_all("script"):
-        txt = sc.string or ""
-        if "HistoricalPriceStore" in txt:
-            blob = txt; break
-    if not blob:
-        raise RuntimeError("HistoricalPriceStore JSON not found")
-    start = blob.index('{"context"'); end = blob.rindex("}") + 1
-    data = json.loads(blob[start:end])
-    prices = data["context"]["dispatcher"]["stores"]["HistoricalPriceStore"]["prices"]
-    out = []
-    for row in prices:
-        if row.get("type") is not None: continue
-        if row.get("close") is None or "date" not in row: continue
-        out.append((epoch_to_ymd(int(row["date"])), row["close"]))
-    if not out:
-        raise RuntimeError("No price rows parsed from HTML JSON")
-    return out
-
-def try_csv(days=365):
-    end = int(time.time()); start = end - days*24*3600
-    params = {"period1": start, "period2": end, "interval": "1d", "events": "history", "includeAdjustedClose": "true"}
-    r = requests.get(CSV_URL, params=params, headers=HEADERS, timeout=25)
-    r.raise_for_status()
-    rows = []
-    for rec in csv.DictReader(r.text.splitlines()):
-        if rec.get("Date") and rec.get("Close") and rec["Close"] not in ("null", ""):
-            rows.append((rec["Date"], rec["Close"]))
-    if not rows:
-        raise RuntimeError("CSV returned no rows")
-    return rows
+    return datetime.fromtimestamp(sec, tz=timezone.utc).strftime("%Y-%m-%d")
 
 def main():
+    r = requests.get(CHART_URL, headers=HEADERS, timeout=25)
+    r.raise_for_status()
+    data = r.json()
+
+    result = data["chart"]["result"][0]
+    ts = result.get("timestamp", []) or []
+    # Prefer adjusted close if available; otherwise regular close
+    adj = (result.get("indicators", {}).get("adjclose") or [{}])[0].get("adjclose")
+    close = (result.get("indicators", {}).get("quote") or [{}])[0].get("close")
+
+    series = adj if adj is not None else close
+    if not ts or not series:
+        raise RuntimeError("No time series returned by Yahoo chart API.")
+
     print("Date, Close")
-    try:
-        rows = try_html()
-    except Exception as e:
-        print(f"# HTML scrape failed ({e}); using CSV fallback.", file=sys.stderr)
-        rows = try_csv()
-    for d, c in rows:
-        print(f"{d}, {c}")
+    for t, c in zip(ts, series):
+        if c is None:
+            continue
+        print(f"{epoch_to_ymd(int(t))}, {c}")
 
 if __name__ == "__main__":
     main()
