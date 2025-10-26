@@ -1,45 +1,37 @@
 """
 football_stats.py
-Scrape NFL TOTAL TOUCHDOWN LEADERS
-Source:
-https://www.pro-football-reference.com/years/2024/leaders/touchdowns_scoring.htm
+Scrape NFL Touchdown Leaders (Top 20)
+Source (scraped via NFL stats feed):
+https://site.web.api.espn.com/apis/v2/sports/football/nfl/athletes
 """
 
 import requests
-from bs4 import BeautifulSoup, Comment
 
-URL = "https://www.pro-football-reference.com/years/2024/leaders/touchdowns_scoring.htm"
+URL = "https://site.web.api.espn.com/apis/v2/sports/football/nfl/athletes?limit=200"
+
 headers = {"User-Agent": "Mozilla/5.0"}
 
-res = requests.get(URL, headers=headers)
-soup = BeautifulSoup(res.text, "html.parser")
+response = requests.get(URL, headers=headers)
+data = response.json()
 
-# Remove HTML comments so table becomes accessible
-for comment in soup.find_all(string=lambda text: isinstance(text, Comment)):
-    comment.extract()
+players = [ ]
 
-# Now find the touchdowns leaders table
-table = soup.find("table", {"id": "leaders"})
-tbody = table.find("tbody")
-rows = tbody.find_all("tr")
+# Extract TD stats if available
+for item in data.get("items", []):
+    name = item.get("fullName", "Unknown")
+    team = item.get("team", {}).get("abbreviation", "N/A")
+    pos = item.get("position", {}).get("abbreviation", "N/A")
 
-print("Rank, Player, Team, TDs")
-rank = 1
+    stats = item.get("stats", {})
+    touchdowns = stats.get("touchdowns") or stats.get("tds") or 0
 
-for row in rows:
-    cols = row.find_all("td")
-    if len(cols) < 3:
-        continue
+    if touchdowns and touchdowns != 0:
+        players.append((name, pos, team, touchdowns))
 
-    player = cols[0].get_text(strip=True)
-    team   = cols[1].get_text(strip=True)
-    tds    = cols[2].get_text(strip=True)
+# Sort by touchdowns (highest first)
+players.sort(key=lambda x: x[3], reverse=True)
 
-    if not tds.isdigit():
-        continue
+print("Rank, Player, Position, Team, TDs")
+for i, p in enumerate(players[:20], start=1):
+    print(f"{i}, {p[0]}, {p[1]}, {p[2]}, {p[3]}")
 
-    print(f"{rank}, {player}, {team}, {tds}")
-    rank += 1
-    if rank > 20:
-        break
-	
